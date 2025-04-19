@@ -1,4 +1,5 @@
 # views.py
+import os
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
@@ -8,6 +9,14 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from collections import defaultdict
 from django.core.cache import cache
+from pymongo import MongoClient
+
+mongo_uri = os.getenv("MONGO_URI", "mongodb+srv://vashninadar123:mibrRJ65Zk3gqFIc@cluster0.yxkud.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster0")
+client = MongoClient(mongo_uri)
+db = client.get_database()
+student_profiles = db['studentprofiles']
+
+model = SentenceTransformer('all-mpnet-base-v2')
 
 User = get_user_model()
 model = SentenceTransformer('all-mpnet-base-v2')
@@ -124,12 +133,13 @@ def get_complementary_skills(target_skill, top_n=10, cluster_weight=0.5):
 def find_complementary_teammates(request):
     try:
         user_skills = request.data.get('skills', [])
+        current_user_id = request.data.get('userId')
         
         if not user_skills:
             return Response({"error": "No skills provided"}, status=400)
         
-        # Get all users with their skills
-        all_users = User.objects.prefetch_related('userskill_set')
+        # Get all users except current user
+        all_users = list(student_profiles.find({"_id": {"$ne": current_user_id}}))
         
         # Prepare response data
         response_data = {
@@ -143,18 +153,18 @@ def find_complementary_teammates(request):
             complementary_skills = get_complementary_skills(skill)
             
             for other_user in all_users:
-                other_skills = [s.name.lower() for s in other_user.userskill_set.all()]
+                other_skills = [s['name'].lower() if isinstance(s, dict) else s.lower() 
+                              for s in other_user.get('skills', [])]
                 common_skills = set(other_skills).intersection(complementary_skills)
                 
                 if common_skills:
-                    profile = other_user.studentprofile
                     response_data['by_skill'][skill].append({
-                        'user_id': other_user.id,
-                        'name': profile.name,
+                        'user_id': str(other_user['_id']),
+                        'name': other_user.get('name', ''),
                         'matching_skills': list(common_skills),
-                        'profile_picture': profile.profile_picture,
-                        'role_preference': profile.role_preference,
-                        'domain': profile.domain
+                        'profile_picture': other_user.get('profilePicture', ''),
+                        'role_preference': other_user.get('rolePreference', ''),
+                        'domain': other_user.get('domain', '')
                     })
         
         # Calculate overall similarity
@@ -163,7 +173,8 @@ def find_complementary_teammates(request):
         
         other_users_data = []
         for other_user in all_users:
-            other_skills = [s.name.lower() for s in other_user.userskill_set.all()]
+            other_skills = [s['name'].lower() if isinstance(s, dict) else s.lower() 
+                          for s in other_user.get('skills', [])]
             if other_skills:
                 other_skills_text = ' '.join(other_skills)
                 other_embedding = model.encode([other_skills_text])[0]
@@ -172,14 +183,13 @@ def find_complementary_teammates(request):
                     [other_embedding]
                 )[0][0])
                 
-                profile = other_user.studentprofile
                 other_users_data.append({
-                    'user_id': other_user.id,
-                    'name': profile.name,
+                    'user_id': str(other_user['_id']),
+                    'name': other_user.get('name', ''),
                     'skills': other_skills,
-                    'profile_picture': profile.profile_picture,
-                    'role_preference': profile.role_preference,
-                    'domain': profile.domain,
+                    'profile_picture': other_user.get('profilePicture', ''),
+                    'role_preference': other_user.get('rolePreference', ''),
+                    'domain': other_user.get('domain', ''),
                     'similarity_score': similarity
                 })
         
