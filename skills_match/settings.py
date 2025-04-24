@@ -138,3 +138,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Your Vite/React frontend
     "http://127.0.0.1:8000",  # Your MERN backend
 ]
+
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+]

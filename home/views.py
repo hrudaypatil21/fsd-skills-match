@@ -15,11 +15,11 @@ mongo_uri = os.getenv("MONGO_URI", "#mongodb link#")
 client = MongoClient(mongo_uri)
 db = client.get_database()
 student_profiles = db['studentprofiles']
+mentors = db['mentors']
 
 model = SentenceTransformer('all-mpnet-base-v2')
 
 User = get_user_model()
-model = SentenceTransformer('all-mpnet-base-v2')
 
 
 skill_role_map = {
@@ -95,7 +95,7 @@ def get_cached_embedding(text):
         cache.set(cache_key, embedding_bytes, timeout=60*60*24)
         return embedding
 
-def get_complementary_skills(target_skill, top_n=10, cluster_weight=0.5):
+def get_complementary_skills(target_skill, top_n=10, cluster_weight=0.7):
     target_clusters = set(skill_role_map.get(target_skill, []))
     
     candidates = []
@@ -129,8 +129,40 @@ def get_complementary_skills(target_skill, top_n=10, cluster_weight=0.5):
     results = sorted(candidates, key=lambda x: -x['composite_score'])
     return [r['skill'] for r in results[:top_n]]
 
+@api_view(['GET'])
+def get_student_profile(request, uid):
+    try:
+        profile = student_profiles.find_one({"uid": uid})
+        if not profile:
+            return Response({"error": "Profile not found"}, status=404)
+        
+        # Handle skills extraction robustly
+        skills = []
+        raw_skills = profile.get("skills", [])
+        
+        if isinstance(raw_skills, list):
+            for item in raw_skills:
+                if isinstance(item, dict) and 'name' in item:
+                    skills.append(item['name'].lower())
+                elif isinstance(item, str):
+                    skills.append(item.lower())
+        
+        # Transform the profile data
+        transformed = {
+            "uid": profile.get("uid"),
+            "name": profile.get("name"),
+            "skills": skills,
+            "profilePicture": profile.get("profilePicture", ""),
+            "rolePreference": profile.get("rolePreference", ""),
+            "domain": profile.get("domain", "")
+        }
+        
+        return Response(transformed)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+    
 @api_view(['POST'])
-def find_complementary_teammates(request):
+def find_mentors(request, uid):
     try:
         user_skills = request.data.get('skills', [])
         current_user_id = request.data.get('userId')
@@ -138,17 +170,100 @@ def find_complementary_teammates(request):
         if not user_skills:
             return Response({"error": "No skills provided"}, status=400)
         
-        # Get all users except current user
-        all_users = list(student_profiles.find({"_id": {"$ne": current_user_id}}))
+        # Get all mentors
+        profile = mentors.find_one({"uid": uid})
+        if not profile:
+            return Response({"error": "Profile not found"}, status=404)
         
         # Prepare response data
+        response_data = {
+            'mentors': [],
+            'user_skills': user_skills
+        }
+        
+        # Calculate skill matches
+        user_skills_text = ' '.join(user_skills)
+        user_embedding = model.encode([user_skills_text])[0]
+        
+        for mentor in mentors:
+            mentor_skills = mentor.get('skills', [])
+            if mentor_skills:
+                mentor_skills_text = ' '.join(mentor_skills)
+                mentor_embedding = model.encode([mentor_skills_text])[0]
+                similarity = float(cosine_similarity(
+                    [user_embedding],
+                    [mentor_embedding]
+                )[0][0])
+                
+                # Calculate skill overlap
+                skill_overlap = set(s.lower() for s in user_skills).intersection(
+                    set(s.lower() for s in mentor_skills)
+                )
+                
+                response_data['mentors'].append({
+                    'mentor_id': str(mentor['_id']),
+                    'name': mentor.get('name', ''),
+                    'skills': mentor_skills,
+                    'profile_picture': mentor.get('profilePicture', ''),
+                    'domain': mentor.get('domain', ''),
+                    'current_position': mentor.get('currentPosition', ''),
+                    'similarity_score': similarity,
+                    'skill_overlap': list(skill_overlap),
+                    'overlap_count': len(skill_overlap)
+                })
+        
+        # Sort by similarity and overlap
+        response_data['mentors'] = sorted(
+            response_data['mentors'],
+            key=lambda x: (-x['similarity_score'], -x['overlap_count'])
+        )[:20]
+        
+        return Response(response_data)
+    
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+@api_view(['POST'])
+def find_complementary_teammates(request):
+    try:
+        print("\n=== Received recommendation request ===")
+        request_data = request.data
+        print("Request data:", request_data)
+        
+        # Get data from request
+        user_skills = request_data.get('skills', [])
+        current_user_id = request_data.get('userId')
+        
+        print(f"User ID: {current_user_id}, Skills: {user_skills}")
+
+        if not isinstance(user_skills, list):
+            print("Error: Skills is not a list")
+            return Response({"error": "Skills should be an array"}, status=400)
+            
+        if not user_skills:
+            print("Warning: Empty skills array")
+            return Response({
+                'by_skill': {},
+                'similar_users': [],
+                'user_skills': []
+            })
+
+        user_skills = request.data.get('skills', [])
+        current_user_id = request.data.get('userId')
+        
+        if not user_skills:
+            return Response({"error": "No skills provided"}, status=400)
+        
+        
+
+        all_users = list(student_profiles.find({"_id": {"$ne": current_user_id}}))
+
         response_data = {
             'by_skill': defaultdict(list),
             'similar_users': [],
             'user_skills': user_skills
         }
-        
-        # Calculate complementary skills matches
+
         for skill in user_skills:
             complementary_skills = get_complementary_skills(skill)
             
@@ -161,13 +276,12 @@ def find_complementary_teammates(request):
                     response_data['by_skill'][skill].append({
                         'user_id': str(other_user['_id']),
                         'name': other_user.get('name', ''),
-                        'matching_skills': list(common_skills),
+                        'matching_skills': list(other_skills),
                         'profile_picture': other_user.get('profilePicture', ''),
                         'role_preference': other_user.get('rolePreference', ''),
                         'domain': other_user.get('domain', '')
                     })
-        
-        # Calculate overall similarity
+
         user_skills_text = ' '.join(user_skills)
         user_embedding = model.encode([user_skills_text])[0]
         
