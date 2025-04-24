@@ -11,7 +11,7 @@ from collections import defaultdict
 from django.core.cache import cache
 from pymongo import MongoClient
 
-mongo_uri = os.getenv("MONGO_URI", "mongodb+srv://vashninadar123:mibrRJ65Zk3gqFIc@cluster0.yxkud.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster0")
+mongo_uri = os.getenv("MONGO_URI", "#mongodb link#")
 client = MongoClient(mongo_uri)
 db = client.get_database()
 student_profiles = db['studentprofiles']
@@ -317,4 +317,3 @@ def find_complementary_teammates(request):
     
     except Exception as e:
         return Response({"error": str(e)}, status=500)
-
