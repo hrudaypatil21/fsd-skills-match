@@ -11,9 +11,9 @@ from django.core.cache import cache
 from pymongo import MongoClient
 from bson import ObjectId
 
-mongo_uri = os.getenv("MONGO_URI", "#mongodb link#")
+mongo_uri = os.getenv("MONGO_URI", "mongodb+srv://vashninadar123:mibrRJ65Zk3gqFIc@cluster0.yxkud.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 client = MongoClient(mongo_uri)
-db = client.get_database()
+db = client.get_database('test')
 student_profiles = db['studentprofiles']
 mentors = db['mentors']
 
