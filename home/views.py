@@ -1,4 +1,3 @@
-# views.py
 import os
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -10,6 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from collections import defaultdict
 from django.core.cache import cache
 from pymongo import MongoClient
+from bson import ObjectId
 
 mongo_uri = os.getenv("MONGO_URI", "#mongodb link#")
 client = MongoClient(mongo_uri)
@@ -248,15 +248,8 @@ def find_complementary_teammates(request):
                 'user_skills': []
             })
 
-        user_skills = request.data.get('skills', [])
-        current_user_id = request.data.get('userId')
-        
-        if not user_skills:
-            return Response({"error": "No skills provided"}, status=400)
-        
-        
-
-        all_users = list(student_profiles.find({"_id": {"$ne": current_user_id}}))
+        # Get all users except current user by comparing uid field
+        all_users = list(student_profiles.find({"uid": {"$ne": current_user_id}}))
 
         response_data = {
             'by_skill': defaultdict(list),
@@ -268,15 +261,21 @@ def find_complementary_teammates(request):
             complementary_skills = get_complementary_skills(skill)
             
             for other_user in all_users:
-                other_skills = [s['name'].lower() if isinstance(s, dict) else s.lower() 
-                              for s in other_user.get('skills', [])]
+                other_skills = []
+                raw_skills = other_user.get('skills', [])
+                for s in raw_skills:
+                    if isinstance(s, dict):
+                        other_skills.append(s.get('name', '').lower())
+                    else:
+                        other_skills.append(s.lower())
+                
                 common_skills = set(other_skills).intersection(complementary_skills)
                 
                 if common_skills:
                     response_data['by_skill'][skill].append({
-                        'user_id': str(other_user['_id']),
+                        'user_id': other_user.get('uid'),  # Use uid instead of _id
                         'name': other_user.get('name', ''),
-                        'matching_skills': list(other_skills),
+                        'matching_skills': other_skills,
                         'profile_picture': other_user.get('profilePicture', ''),
                         'role_preference': other_user.get('rolePreference', ''),
                         'domain': other_user.get('domain', '')
@@ -287,8 +286,14 @@ def find_complementary_teammates(request):
         
         other_users_data = []
         for other_user in all_users:
-            other_skills = [s['name'].lower() if isinstance(s, dict) else s.lower() 
-                          for s in other_user.get('skills', [])]
+            other_skills = []
+            raw_skills = other_user.get('skills', [])
+            for s in raw_skills:
+                if isinstance(s, dict):
+                    other_skills.append(s.get('name', '').lower())
+                else:
+                    other_skills.append(s.lower())
+            
             if other_skills:
                 other_skills_text = ' '.join(other_skills)
                 other_embedding = model.encode([other_skills_text])[0]
@@ -298,7 +303,7 @@ def find_complementary_teammates(request):
                 )[0][0])
                 
                 other_users_data.append({
-                    'user_id': str(other_user['_id']),
+                    'user_id': other_user.get('uid'),  # Use uid instead of _id
                     'name': other_user.get('name', ''),
                     'skills': other_skills,
                     'profile_picture': other_user.get('profilePicture', ''),

@@ -25,8 +25,6 @@ SECRET_KEY = 'django-insecure--&68fhkb^-j%z7=p4)6#3(1d=0#9b2*20xkvjxqytgmn+nk@x6
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
 
 # Application definition
 
@@ -134,13 +132,10 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Your Vite/React frontend
-    "http://127.0.0.1:8000",  # Your MERN backend
-]
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",  # Your Vite/React frontend
+#     "http://127.0.0.1:8000",  # Your MERN backend
+# ]
 
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173"
-]
+ALLOWED_HOSTS = ['*']  # For initial deployment, tighten this later
+CORS_ALLOW_ALL_ORIGINS = True  # Replace your existing CORS settings
