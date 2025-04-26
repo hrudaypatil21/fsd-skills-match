@@ -50,6 +50,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = 'skills_match.urls'
@@ -137,11 +138,36 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 #     "http://127.0.0.1:8000",  # Your MERN backend
 # ]
 
-ALLOWED_HOSTS = ['*']  # For initial deployment, tighten this later
+ALLOWED_HOSTS = [
+    'fsd-skills-match.onrender.com',
+    'localhost',
+    '127.0.0.1'
+]  # For initial deployment, tighten this later
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://127.0.0.1:5173", 
     "https://your-frontend-domain.com",  # Add your production frontend URL
 ]
 
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
